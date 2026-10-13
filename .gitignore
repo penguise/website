@@ -37,3 +37,7 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Unity-generated page and template assets; Next.js supplies the page.
+/public/penguise/index.html
+/public/penguise/TemplateData/
