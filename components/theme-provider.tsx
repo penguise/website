@@ -28,6 +28,7 @@ function isTypingTarget(target: EventTarget | null) {
 
   return (
     target.isContentEditable ||
+    target.tagName === "CANVAS" ||
     target.tagName === "INPUT" ||
     target.tagName === "TEXTAREA" ||
     target.tagName === "SELECT"
