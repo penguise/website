@@ -3,6 +3,13 @@
 import Script from "next/script"
 import { useEffect, useRef, useState } from "react"
 
+import {
+  Progress,
+  ProgressLabel,
+  ProgressValue,
+} from "@/components/ui/progress"
+import { Spinner } from "@/components/ui/spinner"
+
 type UnityInstance = {
   Quit: () => Promise<void>
 }
@@ -23,7 +30,8 @@ declare global {
   interface Window {
     createUnityInstance: (
       canvas: HTMLCanvasElement,
-      config: UnityConfig
+      config: UnityConfig,
+      onProgress: (progress: number) => void
     ) => Promise<UnityInstance>
   }
 }
@@ -39,6 +47,9 @@ export default function Page() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const lifecycleRef = useRef<Promise<void>>(Promise.resolve())
   const [loaderReady, setLoaderReady] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [gameReady, setGameReady] = useState(false)
+  const [loadingFailed, setLoadingFailed] = useState(false)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -52,22 +63,34 @@ export default function Page() {
       .then(async () => {
         if (disposed) return
 
-        instance = await window.createUnityInstance(canvas, {
-          dataUrl: "/penguise/Build/penguise.data.br",
-          frameworkUrl: "/penguise/Build/penguise.framework.js.br",
-          codeUrl: "/penguise/Build/penguise.wasm.br",
-          streamingAssetsUrl: "/penguise/StreamingAssets",
-          companyName: "DefaultCompany",
-          productName: "Penguise",
-          productVersion: "1.0",
-          matchWebGLToCanvasSize: true,
-          autoSyncPersistentDataPath: true,
-        })
+        instance = await window.createUnityInstance(
+          canvas,
+          {
+            dataUrl: "/penguise/Build/penguise.data.br",
+            frameworkUrl: "/penguise/Build/penguise.framework.js.br",
+            codeUrl: "/penguise/Build/penguise.wasm.br",
+            streamingAssetsUrl: "/penguise/StreamingAssets",
+            companyName: "DefaultCompany",
+            productName: "Penguise",
+            productVersion: "1.0",
+            matchWebGLToCanvasSize: true,
+            autoSyncPersistentDataPath: true,
+          },
+          (value) => {
+            if (!disposed) setProgress(value)
+          }
+        )
 
-        if (!disposed) canvas.focus()
+        if (!disposed) {
+          setGameReady(true)
+          canvas.focus()
+        }
       })
       .catch((error: unknown) => {
-        if (!disposed) reportError(error)
+        if (!disposed) {
+          setLoadingFailed(true)
+          reportError(error)
+        }
       })
 
     return () => {
@@ -83,7 +106,10 @@ export default function Page() {
   }, [loaderReady])
 
   return (
-    <main className="fixed inset-0 overflow-hidden">
+    <main
+      aria-busy={!gameReady && !loadingFailed}
+      className="fixed inset-0 overflow-hidden"
+    >
       <canvas
         id="unity-canvas"
         ref={canvasRef}
@@ -91,10 +117,37 @@ export default function Page() {
         tabIndex={0}
         className="block size-full outline-none"
       />
+      {!gameReady && (
+        <div className="absolute inset-0 grid place-items-center bg-background p-6">
+          {loadingFailed ? (
+            <p role="alert" className="text-center text-sm text-destructive">
+              Unable to start Penguise. Please reload the page and try again.
+            </p>
+          ) : progress >= 0.9 ? (
+            <div role="status" className="flex items-center gap-3 text-sm">
+              <Spinner aria-hidden="true" />
+              <span>Preparing game…</span>
+            </div>
+          ) : (
+            <Progress
+              value={Math.round(progress * 100)}
+              className="w-full max-w-xs"
+            >
+              <ProgressLabel aria-live="polite">
+                Loading Penguise…
+              </ProgressLabel>
+              <ProgressValue />
+            </Progress>
+          )}
+        </div>
+      )}
       <Script
         src="/penguise/Build/penguise.loader.js"
         onReady={() => setLoaderReady(true)}
-        onError={reportError}
+        onError={(error) => {
+          setLoadingFailed(true)
+          reportError(error)
+        }}
       />
     </main>
   )
